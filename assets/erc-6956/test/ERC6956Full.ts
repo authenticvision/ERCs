@@ -13,7 +13,15 @@ export enum FloatState {
   Anchored // 2
 }
 
-describe("ERC6956: Asset-Bound NFT --- Full", function () {
+
+const testCases = [
+  { upgradeable: false, description: "" },
+  { upgradeable: true, description: "Upgradeable" }
+];
+
+testCases.forEach( ({upgradeable, description}) => {
+
+describe(`ERC6956Full${description}: Asset-Bound NFT --- Full`, function () {
   // Fixture to deploy the abnftContract contract and assign roles.
   // Besides owner there's user, minter and burner with appropriate roles.
   async function deployAbNftFixture() {
@@ -41,11 +49,32 @@ describe("ERC6956: Asset-Bound NFT --- Full", function () {
   async function actuallyDeploy(attestationLimitPerAnchor: number, limitUpdatePolicy: AttestedTransferLimitUpdatePolicy) {
     const [owner, maintainer, oracle, alice, bob, mallory, hacker, carl, gasProvider ] = await ethers.getSigners();
 
-    const AbNftContract = await ethers.getContractFactory("ERC6956Full");
+    let interfaceContractAddr: string | undefined = undefined;
 
-    const abnftContract = await AbNftContract.connect(owner).deploy("Asset-Bound NFT test", "ABNFT", limitUpdatePolicy);
+    if(upgradeable) {
+      const ImplContract = await ethers.getContractFactory("ERC6956FullUpgradeable");
+      const logicContract = await ImplContract.deploy();
+
+      const ERC6956Proxy = await ethers.getContractFactory("ERC6956Proxy");
+
+      // Initialize the proxy with the implementation contract and the admin address
+      const initializeData = new ethers.Interface(["function initialize(string, string, uint8)"])
+      .encodeFunctionData("initialize", ["Asset-Bound NFT test upgradeable", "ABNFT", limitUpdatePolicy]);
+      
+      // The deployed proxy can then be used such as a normal ERC6956 contract
+      const deployedProxy = await ERC6956Proxy.connect(owner).deploy(await logicContract.getAddress(), maintainer.address, initializeData);
+      interfaceContractAddr = await deployedProxy.getAddress();
+    } else {
+      // Deploy a non-upgradeable contract
+      //expect(interfaceContract).to.not.equal(undefined);
+      const AbNftContract = await ethers.getContractFactory("ERC6956Full");
+      const plainContract = await AbNftContract.connect(owner).deploy("Asset-Bound NFT test upgradeable", "ABNFT", limitUpdatePolicy);
+      interfaceContractAddr = await plainContract.getAddress();
+    }
+    
+    const abnftContract = await ethers.getContractAt("ERC6956Full", interfaceContractAddr);
+
     await abnftContract.connect(owner).updateMaintainer(maintainer.address, true);
-
     // set attestation Limit per anchor
     await abnftContract.connect(maintainer).updateGlobalAttestationLimit(attestationLimitPerAnchor);
 
@@ -94,6 +123,7 @@ describe("Valid Anchors (merkle-trees)", function () {
     .to.revertedWith("ERC6956-E26")
   });
 });
+
 
 describe("Anchor-Floating", function () {
   it("SHOULD only allow maintainer to specify canStartFloating and canStopFloating", async function () {
@@ -204,7 +234,7 @@ describe("Anchor-Floating", function () {
     .withArgs(anchor, tokenId, FloatState.Floating, alice.address);
 
     await expect(abnftContract.connect(mallory).transferFrom(alice.address, mallory.address, tokenId))
-    .to.revertedWith("ERC721: caller is not token owner or approved");
+    .to.revertedWithCustomError(abnftContract, 'ERC721InsufficientApproval'); // ERC6093 error
 
     await expect(abnftContract.connect(alice).transferFrom(alice.address, bob.address, tokenId))
     .to.emit(abnftContract, "Transfer")
@@ -303,18 +333,22 @@ describe("Anchor-Floating", function () {
     .withArgs(await abnftContract.ownerOf(tokenId), bob.address, tokenId);
     
     // Should not allow mallory to transfer, since only bob is approved
-    await expect(abnftContract.connect(mallory).transferFrom(alice.address, bob.address, 1)) 
-    .to.revertedWith("ERC721: caller is not token owner or approved");
+    await expect(abnftContract.connect(mallory).transferFrom(alice.address, bob.address, 1))
+    .to.revertedWith("ERC6956-E5"); // Token is not floatable, so nobody can transfer
 
     // Bob makes it floatable (which is possible, because he is approved)
     await expect(abnftContract.connect(bob).float(anchor, FloatState.Floating))
     .to.emit(abnftContract, "FloatingStateChange")
     .withArgs(anchor, tokenId, FloatState.Floating, bob.address);
-    
+
+    // Should not allow mallory to transfer, since only bob is approved
+    await expect(abnftContract.connect(mallory).transferFrom(alice.address, bob.address, 1)) 
+    .to.revertedWithCustomError(abnftContract, 'ERC721InsufficientApproval'); // ERC6093 error
+
     // Bob transfers it...
     await expect(abnftContract.connect(bob).transferFrom(alice.address, carl.address, tokenId))
     .to.emit(abnftContract, "Transfer")
-    .withArgs(alice.address,carl.address, tokenId);        
+    .withArgs(alice.address,carl.address, tokenId);
   })
 });
 
@@ -442,4 +476,5 @@ describe("Attested Transfer Limits", function () {
   });
 });
   
+});
 });

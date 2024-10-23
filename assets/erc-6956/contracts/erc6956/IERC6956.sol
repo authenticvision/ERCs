@@ -80,7 +80,7 @@ interface IERC6956 {
      * @param anchor The anchor(>0)
      * @return attestationUses The number of attestation uses for a particular anchor, 0 if anchor is invalid.
      */
-    function attestationsUsedByAnchor(bytes32 anchor) view external returns (uint256 attestationUses);
+    function attestationsUsedByAnchor(bytes32 anchor) external view returns (uint256 attestationUses);
     /**
      * @notice Decodes and returns to-address, anchor and the attestation hash, if the attestation is valid
      * @dev MUST throw when
