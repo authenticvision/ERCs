@@ -4,9 +4,7 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 import "./IERC6956.sol";
@@ -51,8 +49,6 @@ contract ERC6956 is
     ERC721Burnable,
     IERC6956 
 {
-    using Counters for Counters.Counter;
-
     mapping(bytes32 => bool) internal _anchorIsReleased; // currently released anchors. Per default, all anchors are dropped, i.e. 1:1 bound
     
     mapping(address => bool) public maintainers;
@@ -75,7 +71,7 @@ contract ERC6956 is
      /**
      * @dev Counter to keep track of issued tokens
      */
-    Counters.Counter private _tokenIdCounter;
+    uint256 private _tokenIdCounter;
 
     /// @dev Default validity timespan of attestation. In validateAttestation the attestationTime is checked for MIN(defaultAttestationvalidity, attestation.expiry)
     uint256 public maxAttestationExpireTime = 5*60; // 5min valid per default
@@ -269,8 +265,8 @@ contract ERC6956 is
         uint256 tokenId = _burnedTokensByAnchor[anchor];
 
         if(tokenId < 1) {
-            _tokenIdCounter.increment();
-            tokenId = _tokenIdCounter.current();
+            _tokenIdCounter = _tokenIdCounter + 1;
+            tokenId = _tokenIdCounter;
         }
 
         assert(anchorByToken[tokenId] <= 0); // safety for contract-internal errors
@@ -432,6 +428,8 @@ contract ERC6956 is
             // authorization for approve and burn, as it mimics ERC-721 behavior
             burnAuthorization = Authorization.OWNER_AND_ASSET;
             approveAuthorization = Authorization.OWNER_AND_ASSET;
+
+            _tokenIdCounter = 0;
     }
   
     /*
