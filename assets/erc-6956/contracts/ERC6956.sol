@@ -3,10 +3,8 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-
 import "./IERC6956.sol";
 
 /** Used for several authorization mechanisms, e.g. who can burn, who can set approval, ... 
@@ -45,7 +43,6 @@ enum Role {
  */
 contract ERC6956 is
     ERC721,
-    ERC721Enumerable,
     ERC721Burnable,
     IERC6956 
 {
@@ -100,8 +97,10 @@ contract ERC6956 is
     {
         // remember the tokenId of burned tokens, s.t. one can issue the token with the same number again
         bytes32 anchor = anchorByToken[tokenId];
+
         require(_roleBasedAuthorization(anchor, createAuthorizationMap(burnAuthorization)), "ERC6956-E2");
-        _burn(tokenId);
+
+        _update(address(0), tokenId, address(0));
     }
 
     function burnAnchor(bytes memory attestation, bytes memory data) public virtual
@@ -114,7 +113,7 @@ contract ERC6956 is
         _commitAttestation(to, anchor, attestationHash);
         uint256 tokenId = tokenByAnchor[anchor];
         // remember the tokenId of burned tokens, s.t. one can issue the token with the same number again
-        _burn(tokenId);
+        _update(address(0), tokenId, ownerOf(tokenId));
     }
 
     function burnAnchor(bytes memory attestation) public virtual {
@@ -129,13 +128,15 @@ contract ERC6956 is
         bytes32 attestationHash;
         (to, anchor, attestationHash) = decodeAttestationIfValid(attestation, data);
         _commitAttestation(to, anchor, attestationHash);
-        require(tokenByAnchor[anchor]>0, "ERC6956-E3");
-        _approve(to, tokenByAnchor[anchor]);
+        uint256 tokenId = tokenByAnchor[anchor];
+        require(tokenId>0, "ERC6956-E3");
+        // Attestation means that the current holder agrees/authorizes temporarily
+        _approve(to, tokenId, ownerOf(tokenId));
     }
 
     // approveAuth == ISSUER does not really make sense.. so no separate implementation, since ERC-721.approve already implies owner...
 
-    function approve(address to, uint256 tokenId) public virtual override(ERC721,IERC721)
+    function approve(address to, uint256 tokenId) public virtual override(ERC721)
         authorized(Role.OWNER, createAuthorizationMap(approveAuthorization))
     {
         super.approve(to, tokenId);
@@ -202,7 +203,7 @@ contract ERC6956 is
         Role myRole = Role.INVALID;
         Role alternateRole = Role.INVALID;
         
-        if(_isApprovedOrOwner(_msgSender(), tokenId)) {
+        if(_isAuthorized(ownerOf(tokenId), _msgSender(), tokenId)) {
             myRole = Role.OWNER;
         }
 
@@ -218,14 +219,16 @@ contract ERC6956 is
     function _beforeAttestationUse(bytes32 anchor, address to, bytes memory data) internal view virtual {}
     
 
-    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+    function _update( address to, uint256 tokenId, address auth)
         internal virtual
-        override(ERC721, ERC721Enumerable)
+        override(ERC721)
+        returns (address)
     {
-        require(batchSize == 1, "ERC6956-E4");
         bytes32 anchor = anchorByToken[tokenId];
-        emit AnchorTransfer(from, to, anchor, tokenId);
 
+        // Use the non-tokenIdExists-required version of owner-of, also allow minting in
+        // the same code-path.
+        emit AnchorTransfer(_ownerOf(tokenId), to, anchor, tokenId);
         if(to == address(0)) {
             // we are burning, ensure the mapping is deleted BEFORE the transfer
             // to avoid reentrant-attacks
@@ -238,6 +241,7 @@ contract ERC6956 is
         }
 
         delete _anchorIsReleased[anchor]; // make sure anchor is non-released after the transfer again
+        return super._update(to, tokenId, auth);
    }
 
     /// @dev hook called after an anchor is minted
@@ -292,15 +296,15 @@ contract ERC6956 is
         (to, anchor, attestationHash) = decodeAttestationIfValid(attestation, data);
         _commitAttestation(to, anchor, attestationHash); // commit already here, will be reverted in error case anyway
 
-        uint256 fromToken = tokenByAnchor[anchor]; // tokenID, null if not exists
+        uint256 tokenId = tokenByAnchor[anchor]; // tokenID, null if not exists
         address from = address(0); // owneraddress or 0x00, if not exists
         
         _anchorIsReleased[anchor] = true; // Attestation always temporarily releases the anchor       
 
-        if(fromToken > 0) {
-            from = ownerOf(fromToken);
+        if(tokenId > 0) {
+            from = ownerOf(tokenId);
             require(from != to, "ERC6956-E6");
-            _safeTransfer(from, to, fromToken, "");
+            _update(to, tokenId, from);
         } else {
             _safeMint(to, anchor);
         }
@@ -326,7 +330,7 @@ contract ERC6956 is
         public
         view
         virtual
-        override(ERC721, ERC721Enumerable)
+        override(ERC721)
         returns (bool)
     {
         return
@@ -407,7 +411,6 @@ contract ERC6956 is
     function updateBurnAuthorization(Authorization burnAuth) public onlyMaintainer() {
         burnAuthorization = burnAuth;
         emit BurnAuthorizationChange(burnAuth, msg.sender);
-        // TODO event
     }
     
     event ApproveAuthorizationChange(Authorization approveAuth, address indexed maintainer);
@@ -415,14 +418,11 @@ contract ERC6956 is
     function updateApproveAuthorization(Authorization approveAuth) public onlyMaintainer() {
         approveAuthorization = approveAuth;
         emit ApproveAuthorizationChange(approveAuth, msg.sender);
-
-        // TODO event
     }
 
     constructor(string memory _name, string memory _symbol)
         ERC721(_name, _symbol) {            
             maintainers[msg.sender] = true; // deployer is automatically maintainer
-            // Indicates general float-ability, i.e. whether anchors can be digitally dropped and released
 
             // OWNER and ASSET shall normally be in sync anyway, so this is reasonable default 
             // authorization for approve and burn, as it mimics ERC-721 behavior

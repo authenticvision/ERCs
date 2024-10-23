@@ -95,6 +95,7 @@ describe("Valid Anchors (merkle-trees)", function () {
   });
 });
 
+
 describe("Anchor-Floating", function () {
   it("SHOULD only allow maintainer to specify canStartFloating and canStopFloating", async function () {
     const { abnftContract, merkleTree, owner, maintainer, mallory } = await loadFixture(deployAbNftAndMintTokenToAliceFixture);
@@ -204,7 +205,7 @@ describe("Anchor-Floating", function () {
     .withArgs(anchor, tokenId, FloatState.Floating, alice.address);
 
     await expect(abnftContract.connect(mallory).transferFrom(alice.address, mallory.address, tokenId))
-    .to.revertedWith("ERC721: caller is not token owner or approved");
+    .to.revertedWithCustomError(abnftContract, 'ERC721InsufficientApproval'); // ERC6093 error
 
     await expect(abnftContract.connect(alice).transferFrom(alice.address, bob.address, tokenId))
     .to.emit(abnftContract, "Transfer")
@@ -303,18 +304,22 @@ describe("Anchor-Floating", function () {
     .withArgs(await abnftContract.ownerOf(tokenId), bob.address, tokenId);
     
     // Should not allow mallory to transfer, since only bob is approved
-    await expect(abnftContract.connect(mallory).transferFrom(alice.address, bob.address, 1)) 
-    .to.revertedWith("ERC721: caller is not token owner or approved");
+    await expect(abnftContract.connect(mallory).transferFrom(alice.address, bob.address, 1))
+    .to.revertedWith("ERC6956-E5"); // Token is not floatable, so nobody can transfer
 
     // Bob makes it floatable (which is possible, because he is approved)
     await expect(abnftContract.connect(bob).float(anchor, FloatState.Floating))
     .to.emit(abnftContract, "FloatingStateChange")
     .withArgs(anchor, tokenId, FloatState.Floating, bob.address);
-    
+
+    // Should not allow mallory to transfer, since only bob is approved
+    await expect(abnftContract.connect(mallory).transferFrom(alice.address, bob.address, 1)) 
+    .to.revertedWithCustomError(abnftContract, 'ERC721InsufficientApproval'); // ERC6093 error
+
     // Bob transfers it...
     await expect(abnftContract.connect(bob).transferFrom(alice.address, carl.address, tokenId))
     .to.emit(abnftContract, "Transfer")
-    .withArgs(alice.address,carl.address, tokenId);        
+    .withArgs(alice.address,carl.address, tokenId);
   })
 });
 

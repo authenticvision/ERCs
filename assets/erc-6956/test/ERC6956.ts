@@ -202,7 +202,9 @@ describe("Authorization Map tests", function () {
         
         // Should not allow mallory to transfer, since only bob is approved
         await expect(abnftContract.connect(mallory).transferFrom(alice.address, bob.address, 1)) 
-        .to.revertedWith("ERC721: caller is not token owner or approved");
+        .to.revertedWith("ERC6956-E5"); // Earlier: "ERC721: caller is not token owner or approved"
+        // Ok to be reverted with E5 ("Token not transferable"), irregardless who connects.
+        // This is actually preferrable, because it is immediately clear that the token is non-floating
 
         // Even though Bob is approved, cannot transfer, since anchor is not floating
         await expect(abnftContract.connect(bob).transferFrom(alice.address, carl.address, tokenId))

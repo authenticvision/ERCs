@@ -130,9 +130,11 @@ contract ERC6956Full is ERC6956, IERC6956AttestationLimited, IERC6956Floatable, 
         emit FloatingStateChange(anchor, tokenByAnchor[anchor], newFloatState, msg.sender);
     }
 
-    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+    function _update( address to, uint256 tokenId, address auth)
         internal virtual
-        override(ERC6956)  {
+        override(ERC6956) 
+      returns (address)
+ {
             bytes32 anchor = anchorByToken[tokenId];
                     
             if(!_anchorIsReleased[anchor]) {
@@ -142,7 +144,7 @@ contract ERC6956Full is ERC6956, IERC6956AttestationLimited, IERC6956Floatable, 
                 }
             }
              
-            super._beforeTokenTransfer(from, to, tokenId, batchSize);
+            return super._update(to, tokenId, auth);
         }
     function _beforeAttestationUse(bytes32 anchor, address to, bytes memory data) internal view virtual override(ERC6956) {
         // empty, can be overwritten by derived conctracts.
