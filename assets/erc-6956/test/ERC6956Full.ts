@@ -13,7 +13,15 @@ export enum FloatState {
   Anchored // 2
 }
 
-describe("ERC6956: Asset-Bound NFT --- Full", function () {
+
+const testCases = [
+  { upgradeable: false, description: "" },
+  { upgradeable: true, description: "Upgradeable" }
+];
+
+testCases.forEach( ({upgradeable, description}) => {
+
+describe(`ERC6956Full${description}: Asset-Bound NFT --- Full`, function () {
   // Fixture to deploy the abnftContract contract and assign roles.
   // Besides owner there's user, minter and burner with appropriate roles.
   async function deployAbNftFixture() {
@@ -447,4 +455,5 @@ describe("Attested Transfer Limits", function () {
   });
 });
   
+});
 });
