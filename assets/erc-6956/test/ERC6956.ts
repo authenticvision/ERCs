@@ -100,7 +100,9 @@ testCases.forEach( ({upgradeable, description}) => {
 
       await expect(abnftContract.connect(gasProvider)["transferAnchor(bytes)"](mintAttestationAlice))
       .to.emit(abnftContract, "Transfer") // Standard ERC721 event
-      .withArgs(NULLADDR, alice.address, 1);
+      .withArgs(NULLADDR, alice.address, 1)
+      .to.emit(abnftContract, "Locked")
+      .withArgs(1);
 
       return { abnftContract, owner, maintainer, oracle, mintAttestationAlice, anchor, alice, bob, mallory, hacker, carl, gasProvider };
     }    

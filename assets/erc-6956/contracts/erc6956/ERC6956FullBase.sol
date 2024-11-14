@@ -63,9 +63,8 @@ abstract contract ERC6956FullBase is ERC6956Base, IERC6956AttestationLimited, IE
     function globalAttestedTransferLimitByAnchor() external view returns (uint256) {
         return _getERC6956AttestedTransferLimitedStorage().globalAttestedTransferLimitByAnchor;
     }
-     
-    
-   
+
+        
 
     function updateGlobalAttestationLimit(uint256 _nrTransfers) 
         public 
@@ -162,7 +161,9 @@ abstract contract ERC6956FullBase is ERC6956Base, IERC6956AttestationLimited, IE
         }
 
         $.floatingStateByAnchor[anchor] = newFloatState;
-        emit FloatingStateChange(anchor, tokenByAnchor(anchor), newFloatState, msg.sender);
+        uint256 tokenId = tokenByAnchor(anchor);
+        emit FloatingStateChange(anchor, tokenId, newFloatState, msg.sender);
+        _emitLockStatus(tokenId);
     }
 
      /// @notice Indicates whether any of OWNER, ISSUER, (ASSET) is allowed to start floating
@@ -179,6 +180,14 @@ abstract contract ERC6956FullBase is ERC6956Base, IERC6956AttestationLimited, IE
         ERC6956FloatableStorage storage $ = _getERC6956FloatableStorage();
         return _floating($.allFloating, $.floatingStateByAnchor[anchor]);
     }    
+
+    
+    function locked(uint256 tokenId) external view override returns (bool) {
+        // If an anchor is floating, it can be transferred like 
+        // ERC-721 NFTs. So according to ERC-5192, this can be considered
+        // unlocked.
+        return !floating(anchorByToken(tokenId));
+    }
 
 
     // ########################################################## VALID ANCHORS

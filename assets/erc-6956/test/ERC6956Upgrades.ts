@@ -109,7 +109,9 @@ export async function minimalAttestationExample() {
 
       expect(await abnftContract["transferAnchor(bytes)"](mintAttestationBob))
       .to.emit(abnftContract, "Transfer") // Standard ERC721 event
-      .withArgs(NULLADDR, bob.address, 2)     
+      .withArgs(NULLADDR, bob.address, 2)
+      .to.emit(abnftContract, "Locked")
+      .withArgs(2);
 
       // We have the standard ERC-6956 deployed. 
       await expect(abnftContract["safeTransferFrom(address,address,uint256)"](bob.address, alice.address, 2))
@@ -142,7 +144,9 @@ export async function minimalAttestationExample() {
       // Finally, Bob can set the NFT to be floating
       await expect(await abNftAsFull.connect(bob).float(anchor, FloatState.Floating))
       .to.emit(abNftAsFull, "FloatingStateChange")
-      .withArgs(anchor, 2, FloatState.Floating, bob.address);
+      .withArgs(anchor, 2, FloatState.Floating, bob.address)
+      .to.emit(abNftAsFull, "Unlocked")
+      .withArgs(2);
 
 
       // Finally, Bob can transfer his precious NFT via normal ERC-721 safeTransferFrom

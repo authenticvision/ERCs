@@ -4,6 +4,8 @@ pragma solidity ^0.8.22;
 
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "./IERC6956.sol";
+import "./IERC5192.sol";
+
 
 /** Used for several authorization mechanisms, e.g. who can burn, who can set approval, ... 
  * @dev Specifying the role in the ecosystem. Used in conjunction with IERC6956.Authorization
@@ -40,7 +42,8 @@ enum Role {
  * ```
  */
 abstract contract ERC6956Base is
-    IERC6956 
+    IERC6956,
+    IERC5192
 {
     /// @custom:storage-location erc7201:storage.ERC6956
     struct ERC6956Storage {
@@ -131,6 +134,19 @@ abstract contract ERC6956Base is
         // Attestation means current owner implicitely authorizes the action.
         _update(address(0), tokenId, _ownerOf(tokenId)); 
     }
+
+    /// @notice Returns lock status according to ERC-5192 
+    /// @dev If IERC6956Floatable is implemented, this function needs to be overridden with actual 
+    /// functionality.
+    /// @param tokenId The tokenId
+    function locked(uint256 tokenId) virtual external view returns (bool) {
+        // ERC-6956 per default can be considered locked
+        // in a traditional NFT-Sense. 
+        // In case you need transferable NFTs, consider implementing IERC6956Floatable
+        // Which is included by ERC6956FullBase implementation
+        return true;
+    }
+
 
     function burnAnchor(bytes memory attestation) public virtual {
         return burnAnchor(attestation, "");
@@ -269,9 +285,6 @@ abstract contract ERC6956Base is
         delete $._anchorIsReleased[anchor]; // make sure anchor is non-released after the transfer again
    }
 
-    /// @dev hook called after an anchor is minted
-    function _afterAnchorMint(address to, bytes32 anchor, uint256 tokenId) internal virtual {}
-
     /**
      * @notice Add (_add=true) or remove (_add=false) a maintainer
      * @dev Note this is a trivial implementation, which can leave the contract without a maintainer.
@@ -306,6 +319,25 @@ abstract contract ERC6956Base is
         _update(to, tokenId, address(0));
         _afterAnchorMint(to, anchor, tokenId);
     }
+
+    /// @notice Hook called after an anchor is minted.
+    /// @dev Emits Transferability-Indication via ERC-5192 events. This is RECOMMENDED by ERC-6956
+    /// @param to New owner
+    /// @param anchor Corresponding anchor of minted token
+    /// @param tokenId tokenId just being minted
+    function _afterAnchorMint(address to, bytes32 anchor, uint256 tokenId) virtual internal {
+        _emitLockStatus(tokenId);
+    }
+
+    /// @notice Emits ERC-5192 events
+    /// @param tokenId The tokenId
+    function _emitLockStatus(uint256 tokenId) internal {
+         if(this.locked(tokenId)) {
+            emit Locked(tokenId);
+        } else {
+            emit Unlocked(tokenId);
+        }
+    } 
 
     function _commitAttestation(address to, bytes32 anchor, bytes32 attestationHash) internal {
         ERC6956Storage storage $ = _getERC6956Storage();
